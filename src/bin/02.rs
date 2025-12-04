@@ -17,7 +17,7 @@ fn has_two_repetitions(n: u64) -> bool {
     let len = s.len();
 
     // Must be even length to split into two equal parts
-    if len % 2 != 0 {
+    if !len.is_multiple_of(2) {
         return false;
     }
 
@@ -35,7 +35,7 @@ fn has_repeating_pattern(n: u64) -> bool {
 
     // Try all possible pattern lengths from 1 to len/2
     for pattern_len in 1..=(len / 2) {
-        if len % pattern_len != 0 {
+        if !len.is_multiple_of(pattern_len) {
             continue;
         }
 
@@ -64,7 +64,7 @@ pub fn part_one(input: &str) -> Option<u64> {
         .trim()
         .split(',')
         .filter_map(parse_range)
-        .flat_map(|range| range)
+        .flatten()
         .filter(|&n| has_two_repetitions(n))
         .sum();
 
@@ -76,7 +76,7 @@ pub fn part_two(input: &str) -> Option<u64> {
         .trim()
         .split(',')
         .filter_map(parse_range)
-        .flat_map(|range| range)
+        .flatten()
         .filter(|&n| has_repeating_pattern(n))
         .sum();
 
