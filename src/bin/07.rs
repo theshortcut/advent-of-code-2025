@@ -15,7 +15,10 @@ struct ParseError;
 
 impl std::fmt::Display for ParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Failed to parse manifold: empty grid or no start position")
+        write!(
+            f,
+            "Failed to parse manifold: empty grid or no start position"
+        )
     }
 }
 
@@ -35,7 +38,10 @@ impl TryFrom<&str> for Manifold {
         let cols = grid[0].len();
 
         // Find the starting position 'S' using iterator methods
-        let start_col = grid[0].iter().position(|&ch| ch == b'S').ok_or(ParseError)?;
+        let start_col = grid[0]
+            .iter()
+            .position(|&ch| ch == b'S')
+            .ok_or(ParseError)?;
 
         Ok(Manifold {
             grid,
