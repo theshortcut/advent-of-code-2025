@@ -5,7 +5,10 @@ struct ParseError;
 
 impl std::fmt::Display for ParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Failed to parse junction network: empty or invalid input")
+        write!(
+            f,
+            "Failed to parse junction network: empty or invalid input"
+        )
     }
 }
 
@@ -135,7 +138,6 @@ impl TryFrom<&str> for JunctionNetwork {
 }
 
 impl JunctionNetwork {
-
     fn connect_k_closest(&self, k: usize) -> Option<u64> {
         let mut uf = UnionFind::new(self.boxes.len());
         let connections = k.min(self.edges.len());
