@@ -1,7 +1,5 @@
 advent_of_code::solution!(9);
 
-use std::collections::HashMap;
-
 #[derive(Debug)]
 struct ParseError;
 
@@ -21,7 +19,9 @@ struct Point {
 
 struct TileGrid {
     tiles: Vec<Point>,
-    valid_ranges: HashMap<i32, Vec<(i32, i32)>>,
+    valid_ranges: Vec<Vec<(i32, i32)>>,
+    min_y: i32,
+    max_y: i32,
 }
 
 impl TryFrom<&str> for TileGrid {
@@ -43,11 +43,17 @@ impl TryFrom<&str> for TileGrid {
             return Err(ParseError);
         }
 
-        let valid_ranges = Self::compute_valid_ranges(&tiles);
+        let min_y = tiles.iter().map(|p| p.y).min().unwrap();
+        let max_y = tiles.iter().map(|p| p.y).max().unwrap();
+
+        let (valid_ranges, min_y_actual, max_y_actual) =
+            Self::compute_valid_ranges(&tiles, min_y, max_y);
 
         Ok(TileGrid {
             tiles,
             valid_ranges,
+            min_y: min_y_actual,
+            max_y: max_y_actual,
         })
     }
 }
@@ -60,14 +66,19 @@ impl TileGrid {
     /// 2. Sort crossing points and pair them to create valid ranges
     /// 3. Include any horizontal edges at this y-coordinate
     /// 4. Merge overlapping ranges
-    fn compute_valid_ranges(tiles: &[Point]) -> HashMap<i32, Vec<(i32, i32)>> {
-        let mut ranges = HashMap::new();
+    ///
+    /// Returns (ranges_vec, min_y, max_y) where ranges_vec[i] corresponds to y = min_y + i
+    fn compute_valid_ranges(
+        tiles: &[Point],
+        min_y: i32,
+        max_y: i32,
+    ) -> (Vec<Vec<(i32, i32)>>, i32, i32) {
         let n = tiles.len();
-
-        let min_y = tiles.iter().map(|p| p.y).min().unwrap();
-        let max_y = tiles.iter().map(|p| p.y).max().unwrap();
+        let height = (max_y - min_y + 1) as usize;
+        let mut ranges = vec![Vec::new(); height];
 
         for y in min_y..=max_y {
+            let y_idx = (y - min_y) as usize;
             let mut crossings = Vec::new();
 
             for i in 0..n {
@@ -83,10 +94,7 @@ impl TileGrid {
                 if p1.y == p2.y && p1.y == y {
                     let x_min = p1.x.min(p2.x);
                     let x_max = p1.x.max(p2.x);
-                    ranges
-                        .entry(y)
-                        .or_insert_with(Vec::new)
-                        .push((x_min, x_max));
+                    ranges[y_idx].push((x_min, x_max));
                 }
             }
 
@@ -94,20 +102,15 @@ impl TileGrid {
             crossings.sort_unstable();
             for chunk in crossings.chunks(2) {
                 if chunk.len() == 2 {
-                    ranges
-                        .entry(y)
-                        .or_insert_with(Vec::new)
-                        .push((chunk[0], chunk[1]));
+                    ranges[y_idx].push((chunk[0], chunk[1]));
                 }
             }
 
             // Merge overlapping ranges for this y-coordinate
-            if let Some(y_ranges) = ranges.get_mut(&y) {
-                Self::merge_ranges(y_ranges);
-            }
+            Self::merge_ranges(&mut ranges[y_idx]);
         }
 
-        ranges
+        (ranges, min_y, max_y)
     }
 
     /// Merge overlapping or adjacent ranges in-place
@@ -160,16 +163,20 @@ impl TileGrid {
     /// Check if the x-range [x1, x2] is entirely within valid ranges for y
     #[inline]
     fn is_x_range_valid(&self, y: i32, x1: i32, x2: i32) -> bool {
-        if let Some(ranges) = self.valid_ranges.get(&y) {
-            ranges
-                .iter()
-                .any(|&(range_min, range_max)| range_min <= x1 && x2 <= range_max)
-        } else {
-            false
+        if y < self.min_y || y > self.max_y {
+            return false;
         }
+
+        let y_idx = (y - self.min_y) as usize;
+        let ranges = &self.valid_ranges[y_idx];
+
+        ranges
+            .iter()
+            .any(|&(range_min, range_max)| range_min <= x1 && x2 <= range_max)
     }
 
     /// Check if a rectangle is valid (all tiles are red or green)
+    #[inline]
     fn is_valid_rectangle(&self, p1: Point, p2: Point) -> bool {
         let min_x = p1.x.min(p2.x);
         let max_x = p1.x.max(p2.x);
@@ -177,37 +184,46 @@ impl TileGrid {
         let max_y = p1.y.max(p2.y);
 
         // Check if every horizontal slice of the rectangle is valid
-        (min_y..=max_y).all(|y| self.is_x_range_valid(y, min_x, max_x))
+        for y in min_y..=max_y {
+            if !self.is_x_range_valid(y, min_x, max_x) {
+                return false;
+            }
+        }
+        true
     }
 
     /// Find the largest valid rectangle (all tiles red or green)
     fn largest_valid_rectangle_area(&self) -> u64 {
         let n = self.tiles.len();
 
-        // Generate all rectangle candidates and sort by area (largest first)
-        let mut candidates: Vec<(u64, Point, Point)> = Vec::with_capacity(n * (n - 1) / 2);
+        // Pre-compute all candidate areas with their indices
+        let mut candidates: Vec<(u64, usize, usize)> = (0..n)
+            .flat_map(|i| {
+                (i + 1..n).map(move |j| {
+                    let p1 = self.tiles[i];
+                    let p2 = self.tiles[j];
+                    let width = (p1.x - p2.x).unsigned_abs() as u64 + 1;
+                    let height = (p1.y - p2.y).unsigned_abs() as u64 + 1;
+                    let area = width * height;
+                    (area, i, j)
+                })
+            })
+            .collect();
 
-        for i in 0..n {
-            for j in i + 1..n {
-                let p1 = self.tiles[i];
-                let p2 = self.tiles[j];
-                let width = (p1.x - p2.x).unsigned_abs() as u64 + 1;
-                let height = (p1.y - p2.y).unsigned_abs() as u64 + 1;
-                let area = width * height;
-                candidates.push((area, p1, p2));
-            }
-        }
+        // Sort by area descending
+        candidates.sort_unstable_by_key(|&(area, _, _)| std::cmp::Reverse(area));
 
-        candidates.sort_unstable_by(|a, b| b.0.cmp(&a.0));
+        // Check candidates in order of decreasing area
+        for &(area, i, j) in &candidates {
+            let p1 = self.tiles[i];
+            let p2 = self.tiles[j];
 
-        // Find first (largest) valid rectangle
-        for (area, p1, p2) in candidates {
             if self.is_valid_rectangle(p1, p2) {
-                return area; // Found the largest valid rectangle
+                return area;
             }
         }
 
-        0 // No valid rectangle found
+        0
     }
 }
 
